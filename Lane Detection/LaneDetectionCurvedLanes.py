@@ -26,17 +26,19 @@ def edge_detection(result):
     edges = cv2.Canny(result, lower, upper)
     return edges
 
-def preprocess_image_night(image):
-    """
-    Extract white lanes and perform edge detection.
-    """
+def preprocess_image_night(image, night):
+    low_h, low_s, low_v, high_h, high_s, high_v = 0, 0, 200, 180, 255, 255
+    block_size = 15
+    kernel_size = 5
     lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
     l_channel, a, b = cv2.split(lab)
-
+    if not night:
+        shadow_mask = cv2.inRange(l_channel, 0, 70)
+        l_channel[shadow_mask > 0] = 0
+        block_size = 3
     # Apply CLAHE to the L-channel
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     enhanced_l = clahe.apply(l_channel)
-    low_h, low_s, low_v, high_h, high_s, high_v = 0, 0, 200, 180, 255, 255
     # Merge CLAHE-enhanced L-channel back with a and b channels
     enhanced_lab = cv2.merge((enhanced_l, a, b))
     enhanced_image = cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2BGR)
@@ -54,9 +56,8 @@ def preprocess_image_night(image):
     # Convert to grayscale
     gray = cv2.cvtColor(masked_image, cv2.COLOR_BGR2GRAY)
     adaptive_thresh = cv2.adaptiveThreshold(
-        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 15, 2
+        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, block_size, 2
     )
-    kernel_size = 5
     # Apply Gaussian blur
     blurred = cv2.GaussianBlur(adaptive_thresh, (kernel_size, kernel_size), 0)
     edges = edge_detection(blurred)
@@ -70,7 +71,8 @@ def preprocess_image_day(img, s_thresh=(100, 255), sx_thresh=(15, 255)):
     hls = cv2.cvtColor(img, cv2.COLOR_RGB2HLS).astype(np.float32)
     l_channel = hls[:, :, 1]
     s_channel = hls[:, :, 2]
-
+    shadow_mask = cv2.inRange(l_channel, 0, 70)  # Adjust threshold for shadow detection
+    l_channel[shadow_mask > 0] = 0
     # Assuming l_channel is defined and is a grayscale image
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
 
@@ -79,12 +81,6 @@ def preprocess_image_day(img, s_thresh=(100, 255), sx_thresh=(15, 255)):
 
     # Apply CLAHE to the entire channel
     enhanced_l_channel = clahe.apply(l_channel_uint8)
-
-    # Create a shadow mask
-    shadow_mask = cv2.inRange(l_channel, 0, 70)  # Adjust threshold for shadow detection
-
-    # If you want to keep shadows unchanged, you can use the following logic:
-    enhanced_l_channel[shadow_mask > 0] = l_channel[shadow_mask > 0]
     # Sobel x
     sobelx = cv2.Sobel(enhanced_l_channel, cv2.CV_64F, 1, 1)
     abs_sobelx = np.absolute(sobelx)
@@ -110,7 +106,8 @@ def lane_detection_pipeline(image, cb, pw, ls, cf, lcd, night):
     """
     img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     calib_img = cb.undistort(img)
-    edges = preprocess_image_night(calib_img) if night else preprocess_image_day(calib_img)
+    edges = preprocess_image_night(calib_img, night)
+    #edges = preprocess_image_night(calib_img) if night else preprocess_image_day(calib_img)
     # plt.imshow(pw.visualize_points(img))
     # plt.show()
     roi_edges = pw.perspective_warp(edges)
@@ -139,12 +136,12 @@ def initialize_classes():
     """
     cb = CameraCalibration()
     src_night = np.float32([(0.26, 0.70), (0.53, 0.70), (0.0, 1.0), (1.0, 1.0)])
-    src_day = np.float32([(0.41, 0.6), (0.56, 0.6), (0.0, 1.0), (1.0, 1.0)])
+    src_day = np.float32([(0.40, 0.6), (0.57, 0.6), (0.0, 1.0), (1.0, 1.0)])
     pw_night = PerspectiveWarp(src=src_night)
     pw_day = PerspectiveWarp(src=src_day)
     ls = LaneSeparator()
     cf = CurveFit()
-    lcd = LaneChangeDetector(threshold=375, temporal_window=300)
+    lcd = LaneChangeDetector(threshold=375, temporal_window=100)
     return cb, pw_night, pw_day, ls, cf, lcd
 
 
@@ -174,7 +171,7 @@ def plot_temporal_median_histogram(temporal_median, median_history):
 
 def display_lane_change_status(lcd, lane_change, lane_edges, lane_change_count, keep_printing, last_lane_change):
     if lane_change:
-        if sum(lcd.temporal_lane_change_flags) >= 3:
+        if sum(list(lcd.temporal_lane_change_flags)[-10:]) >= 5:
             last_lane_change = lane_change
             cv2.putText(lane_edges, f"Lane Change: {lane_change}", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1,
                         (0, 255, 0), 2)
@@ -211,7 +208,6 @@ def process_video_live(input_filename):
         pw = pw_night if mean_brightness < 70 else pw_day
         night = True if mean_brightness < 70 else False
         lane_edges, lane_change = lane_detection_pipeline(frame, cb, pw, ls, cf, lcd, night)
-
         if lane_edges is not None:
             # Display the lane change status
             lane_change_count, keep_printing, last_lane_change = display_lane_change_status(lcd, lane_change, lane_edges, lane_change_count, keep_printing, last_lane_change)
@@ -287,8 +283,8 @@ def save_processed_video(input_filename, output_filename):
 
 if __name__ == "__main__":
     # Example usage
-    input_video_path = 'day_and_night.mp4'  # Path to your input video
-    #input_video_path = 'LaneChange.mp4'
+    #input_video_path = 'day_and_night_cut.mp4'  # Path to your input video
+    input_video_path = 'day_and_night.mp4'
     output_video_path = 'output_video.mp4'  # Path to save the output video
 
     # Process the video

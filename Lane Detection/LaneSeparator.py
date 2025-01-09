@@ -12,7 +12,7 @@ class LaneSeparator:
         """Initialize lane parameters for smoothing."""
         self.left_fit_history = []
         self.right_fit_history = []
-        self.smoothing_window = 10
+        self.smoothing_window = 20
 
     def sliding_window(self, img, nwindows=9, margin=150, minpix=1, draw_windows=True):
         """
