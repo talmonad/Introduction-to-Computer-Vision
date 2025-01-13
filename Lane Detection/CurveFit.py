@@ -9,39 +9,6 @@ class CurveFit:
         self.lane_length_meters = lane_length_meters  # Lane length (meters) corresponding to the image height
         self.lane_width_meters = lane_width_meters    # Lane width (meters) corresponding to the image width
 
-    # def get_curve(self, img, leftx, rightx):
-    #     """
-    #     Calculate the curvature of the lane lines and the car's position relative to the lane center.
-    #     """
-    #     # Get the image dimensions
-    #     img_height, img_width = img.shape[:2]
-    #
-    #     # Dynamically calculate meters per pixel
-    #     ym_per_pix = self.lane_length_meters / img_height  # Meters per pixel in the y-dimension
-    #     xm_per_pix = self.lane_width_meters / img_width    # Meters per pixel in the x-dimension
-    #
-    #     ploty = np.linspace(0, img_height - 1, img_height)
-    #     y_eval = np.max(ploty)  # Evaluate curvature at the bottom of the image
-    #
-    #     # Fit polynomials to the lane lines in world space
-    #     left_fit_cr = np.polyfit(ploty * ym_per_pix, leftx * xm_per_pix, 2)
-    #     right_fit_cr = np.polyfit(ploty * ym_per_pix, rightx * xm_per_pix, 2)
-    #
-    #     # Calculate radii of curvature
-    #     left_curverad = ((1 + (2 * left_fit_cr[0] * y_eval * ym_per_pix + left_fit_cr[1]) ** 2) ** 1.5) / \
-    #                     np.abs(2 * left_fit_cr[0])
-    #     right_curverad = ((1 + (2 * right_fit_cr[0] * y_eval * ym_per_pix + right_fit_cr[1]) ** 2) ** 1.5) / \
-    #                      np.abs(2 * right_fit_cr[0])
-    #
-    #     # Calculate the car's position relative to the lane center
-    #     car_pos = img_width / 2
-    #     left_lane_bottom = left_fit_cr[0] * (img_height ** 2) + left_fit_cr[1] * img_height + left_fit_cr[2]
-    #     right_lane_bottom = right_fit_cr[0] * (img_height ** 2) + right_fit_cr[1] * img_height + right_fit_cr[2]
-    #     lane_center_position = (left_lane_bottom + right_lane_bottom) / 2
-    #     center_offset = (car_pos - lane_center_position) * xm_per_pix / 10
-    #
-    #     return left_curverad, right_curverad, center_offset
-
     def draw_lanes(self, img, left_fit, right_fit, perspective_warp):
         """
         Draw the detected lane area onto the image.

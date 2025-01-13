@@ -1,7 +1,3 @@
-import cv2
-import numpy as np
-from numpy.ma.core import clip
-import matplotlib.pyplot as plt
 from LaneChangeDetector import *
 from moviepy.video.io.VideoFileClip import VideoFileClip
 from CameraCalibration import *
@@ -10,15 +6,6 @@ from LaneSeparator import *
 from CurveFit import *
 
 
-def night_time_processing(img, gamma=0.4):
-    """
-        Preprocess image for lane detection with adjustments for night mode.
-        """
-    # Apply gamma correction
-    gamma_corrected = np.power(img / 255.0, gamma)
-    gamma_corrected = (gamma_corrected * 255).astype(np.uint8)
-    return gamma_corrected
-
 def edge_detection(result):
     median_intensity = np.median(result)
     lower = int(max(0, 0.7 * median_intensity))
@@ -26,7 +13,8 @@ def edge_detection(result):
     edges = cv2.Canny(result, lower, upper)
     return edges
 
-def preprocess_image_night(image, night):
+
+def preprocess_image(image, night):
     low_h, low_s, low_v, high_h, high_s, high_v = 0, 0, 200, 180, 255, 255
     block_size = 15
     kernel_size = 5
@@ -64,54 +52,15 @@ def preprocess_image_night(image, night):
     return edges
 
 
-def preprocess_image_day(img, s_thresh=(100, 255), sx_thresh=(15, 255)):
-    """
-    Preprocess the image to extract lane edges using Sobel gradients and color thresholds.
-    """
-    hls = cv2.cvtColor(img, cv2.COLOR_RGB2HLS).astype(np.float32)
-    l_channel = hls[:, :, 1]
-    s_channel = hls[:, :, 2]
-    shadow_mask = cv2.inRange(l_channel, 0, 70)  # Adjust threshold for shadow detection
-    l_channel[shadow_mask > 0] = 0
-    # Assuming l_channel is defined and is a grayscale image
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-
-    # Ensure l_channel is in the correct data type
-    l_channel_uint8 = l_channel.astype(np.uint8)
-
-    # Apply CLAHE to the entire channel
-    enhanced_l_channel = clahe.apply(l_channel_uint8)
-    # Sobel x
-    sobelx = cv2.Sobel(enhanced_l_channel, cv2.CV_64F, 1, 1)
-    abs_sobelx = np.absolute(sobelx)
-    scaled_sobel = np.uint8(255 * abs_sobelx / np.max(abs_sobelx))
-
-    # Threshold x gradient
-    sxbinary = np.zeros_like(scaled_sobel)
-    sxbinary[(scaled_sobel >= sx_thresh[0]) & (scaled_sobel <= sx_thresh[1])] = 1
-
-    # Threshold color channel
-    s_binary = np.zeros_like(s_channel)
-    s_binary[(s_channel >= s_thresh[0]) & (s_channel <= s_thresh[1])] = 1
-
-    # Combine binary thresholds
-    combined_binary = np.zeros_like(sxbinary)
-    combined_binary[(s_binary == 1) | (sxbinary == 1)] = 1
-    return combined_binary
-
-
 def lane_detection_pipeline(image, cb, pw, ls, cf, lcd, night):
     """
     Complete pipeline for lane detection on a single frame.
     """
     img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     calib_img = cb.undistort(img)
-    edges = preprocess_image_night(calib_img, night)
-    #edges = preprocess_image_night(calib_img) if night else preprocess_image_day(calib_img)
-    # plt.imshow(pw.visualize_points(img))
-    # plt.show()
+    edges = preprocess_image(calib_img, night)
     roi_edges = pw.perspective_warp(edges)
-    out_img, curves, lanes, ploty = ls.sliding_window(roi_edges, draw_windows=False)
+    out_img, curves, lanes, ploty = ls.sliding_window(roi_edges, draw_windows=True)
     out_img = cf.draw_lanes(img, curves[0], curves[1], perspective_warp=pw)
     lane_change = lcd.detect_lane_change(curves[0], curves[1])
     return out_img, lane_change
@@ -141,7 +90,7 @@ def initialize_classes():
     pw_day = PerspectiveWarp(src=src_day)
     ls = LaneSeparator()
     cf = CurveFit()
-    lcd = LaneChangeDetector(threshold=375, temporal_window=100)
+    lcd = LaneChangeDetector(threshold=375, temporal_window=300)
     return cb, pw_night, pw_day, ls, cf, lcd
 
 
@@ -196,6 +145,7 @@ def process_video_live(input_filename):
     lane_change_count = 18
     keep_printing = False
     last_lane_change = None
+    last_scenery = False
     median_history = []
 
     for frame in base_clip.iter_frames(fps=10):
@@ -205,8 +155,13 @@ def process_video_live(input_filename):
         # Pass the frame through the lane detection pipeline
         temporal_median = np.median(np.stack(median_history), axis=0).astype(np.uint8)
         mean_brightness = np.mean(temporal_median)
-        pw = pw_night if mean_brightness < 70 else pw_day
         night = True if mean_brightness < 70 else False
+        if last_scenery != night:
+            last_scenery = night
+            cb, pw_night, pw_day, ls, cf, lcd = initialize_classes()
+        if night:
+            ls.smoothing_window = 25
+        pw = pw_night if mean_brightness < 70 else pw_day
         lane_edges, lane_change = lane_detection_pipeline(frame, cb, pw, ls, cf, lcd, night)
         if lane_edges is not None:
             # Display the lane change status
@@ -223,10 +178,11 @@ def process_video_live(input_filename):
 
         count += 1
         # Plot the temporal histogram periodically
-        if count % 100 == 0:
+        if count % 50 == 0:
             lcd.plot_temporal_hist()
-            # temporal_median = np.median(np.stack(median_history), axis=0).astype(np.uint8)
-            # plot_temporal_median_histogram(temporal_median, median_history)
+            temporal_median = np.median(np.stack(median_history), axis=0).astype(np.uint8)
+            plot_temporal_median_histogram(temporal_median, median_history)
+            plt.show()
             plt.imshow(pw.visualize_points(lane_edges))
             plt.show()
             pass
@@ -256,6 +212,7 @@ def save_processed_video(input_filename, output_filename):
     lane_change_count = 18
     keep_printing = False
     last_lane_change = None
+    last_scenery = False
     # Process each video frame
     for frame in base_clip.iter_frames(fps=fps):
         # Pass the frame through the lane detection pipeline
@@ -264,8 +221,13 @@ def save_processed_video(input_filename, output_filename):
         # Pass the frame through the lane detection pipeline
         temporal_median = np.median(np.stack(median_history), axis=0).astype(np.uint8)
         mean_brightness = np.mean(temporal_median)
-        pw = pw_night if mean_brightness < 70 else pw_day
         night = True if mean_brightness < 70 else False
+        if last_scenery != night:
+            last_scenery = night
+            cb, pw_night, pw_day, ls, cf, lcd = initialize_classes()
+        if night:
+            ls.smoothing_window = 25
+        pw = pw_night if mean_brightness < 70 else pw_day
         lane_edges, lane_change = lane_detection_pipeline(frame, cb, pw, ls, cf, lcd, night)
         if lane_edges is not None:
             lane_change_count, keep_printing, last_lane_change = display_lane_change_status(lcd, lane_change, lane_edges, lane_change_count, keep_printing, last_lane_change)
@@ -282,11 +244,9 @@ def save_processed_video(input_filename, output_filename):
 
 
 if __name__ == "__main__":
-    # Example usage
-    #input_video_path = 'day_and_night_cut.mp4'  # Path to your input video
-    input_video_path = 'day_and_night.mp4'
+    input_video_path = 'shadow.mp4'
     output_video_path = 'output_video.mp4'  # Path to save the output video
 
     # Process the video
-    #process_video_live(input_video_path)
-    save_processed_video(input_video_path, output_video_path)
+    process_video_live(input_video_path)
+    #save_processed_video(input_video_path, output_video_path)
