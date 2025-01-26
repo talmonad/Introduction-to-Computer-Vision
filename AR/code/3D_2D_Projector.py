@@ -19,6 +19,7 @@ if __name__ == "__main__":
     image_warper = ImageWarper()
     cb = CalibrateCamera()
     p3d = Processor3D("rabbit.obj")
+    #p3d = Processor3D("Dragon 2.5_ply.ply")
     template_processor = ImageProcessor(TEMPLATE_IMAGE_PATH, visualizer, cb)
     video_processor = VideoProcessor(VIDEO_INPUT_PATH, VIDEO_OUTPUT_PATH, OUTPUT_IMAGE_DIRECTORY)
     template_processor.process_template(calibrate=True)

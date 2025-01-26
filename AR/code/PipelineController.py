@@ -9,7 +9,7 @@ GOOD_MATCHES_THRESHOLD = 5
 
 
 class PipelineController:
-    def __init__(self, template_processor, video_processor, feature_matcher, visualizer, image_warper, cb, p3d, blending_alpha=0.7, history_size=100):
+    def __init__(self, template_processor, video_processor, feature_matcher, visualizer, image_warper, cb, p3d, blending_alpha=0.7, history_size=300):
         self.template_processor = template_processor
         self.video_processor = video_processor
         self.feature_matcher = feature_matcher
@@ -116,7 +116,7 @@ class PipelineController:
                     out_frame = frame_rgb
             else:
                 warped_frame = self.image_warper.warpTwoImages(
-                    frame_for_display, self.template_processor.template_img_rgb, smooth_H, roi_scale
+                    frame_for_display, self.template_processor.template_img_rgb, smooth_H, roi_scale, calibration_matrix, self.cb.dist, calibrate
                 )
                 out_frame = cv2.addWeighted(frame, 1 - self.blending_alpha, warped_frame, self.blending_alpha, 0)
 

@@ -19,12 +19,14 @@ class ImageWarper:
         [xmax, ymax] = int32(pts.max(axis=0).ravel() + 0.5)
         return xmin, xmax, ymin, ymax
 
-    def warpTwoImages(self, img1, img2, H, roi_scale):
+    def warpTwoImages(self, img1, img2, H, roi_scale, calibration_matrix, dist, calibrate):
         # warp img2 to img1 with homography H
         h, w = img1.shape[:2]
         # top_left, bottom_left, bottom_right, top_right
         pts1 = float32([[roi_scale[0][0]*w, roi_scale[0][1]*h], [roi_scale[1][0]*w, roi_scale[1][1]*h], [roi_scale[2][0]*w, roi_scale[2][1]*h], [roi_scale[3][0]*w, roi_scale[3][1]*h]]).reshape(-1, 1, 2)
         pts2_ = self.getPerspectivePoints(img2, H, roi_scale)
+        if calibrate:
+            pts2_ = cv2.undistortPoints(pts2_, calibration_matrix, dist, None, calibration_matrix)
         pts = concatenate((pts1, pts2_), axis=0)
         xmin, xmax, ymin, ymax = self.get_min_max(pts)
         t = [-xmin, -ymin]

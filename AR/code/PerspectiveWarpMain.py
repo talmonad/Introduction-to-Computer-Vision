@@ -7,8 +7,8 @@ from PipelineController import *
 from CalibrateCamera import *
 
 if __name__ == "__main__":
-    TEMPLATE_IMAGE_PATH = 'trevi_cropped.jpg'
-    VIDEO_INPUT_PATH = 'Trevi.MOV'
+    TEMPLATE_IMAGE_PATH = 'trevi_port.jpg'
+    VIDEO_INPUT_PATH = 'trevi_port.MOV'
     VIDEO_OUTPUT_PATH = 'path_to_output_video.mp4'
     OUTPUT_IMAGE_DIRECTORY = 'output_images'
 
