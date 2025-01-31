@@ -111,7 +111,7 @@ class PipelineController:
                         # draw cube
                         #self.visualizer.draw_cube(self.template_processor, rvec, tvec, calibration_matrix, self.cb.dist, frame_for_display)
                         # draw 3d object
-                        out_frame = self.p3d.draw(frame_for_display, rvec, tvec, calibration_matrix)
+                        out_frame = self.p3d.draw(frame_for_display, rvec, tvec, calibration_matrix, move_object=True, show=False)
                 else:
                     out_frame = frame_rgb
             else:
